@@ -1,0 +1,18 @@
+﻿{
+  "Name": "WeaponVariance",
+  "Enabled": true,
+
+  "Version": "0.0.1",
+
+  "Author": "janxious",
+  "Website": "https://github.com/janxious/WeaponVariance",
+
+  "DLL": "WeaponVariance.dll",
+  "DLLEntryPoint": "WeaponVariance.WeaponVariance.Init",
+  "DependsOn": [],
+  "ConflictsWith": [],
+
+  "Settings": {
+    "debug": false
+  }
+}
