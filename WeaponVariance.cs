@@ -107,7 +107,7 @@ namespace WeaponVariance
         static bool Prefix(MessageCenterMessage message, AttackDirector.AttackSequence __instance)
         {   // The only point of this is logging the damage that is sent through the system messaging queues
             var attackSequenceImpactMessage = (AttackSequenceImpactMessage)message;
-            Logger.Debug($"hit damage: {attackSequenceImpactMessage.hitDamage}\n");
+            Logger.Debug($"hit damage: {attackSequenceImpactMessage.hitDamage}");
             return true;
         }
     }
