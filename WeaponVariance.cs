@@ -119,8 +119,11 @@ namespace WeaponVariance
             if (runDebug)
             {
                 runDebug = false;
+                const int iterations = 2000;
                 StringBuilder builder;
                 VarianceBounds testBounds;
+
+                // test 1: whatever is defined for the weapon plus the mod setting
                 testBounds = new VarianceBounds(
                     damagePerShot - damageVariance,
                     damagePerShot + damageVariance,
@@ -128,13 +131,14 @@ namespace WeaponVariance
                 );
                 builder = new StringBuilder();
                 builder.AppendLine("HEADER");
-                for (int i = 0; i < 2000; i++)
+                for (int i = 0; i < iterations; i++)
                 {
                     builder.AppendLine(NormalDistibutionRandom(testBounds, 1).ToString());
                 }
                 builder.AppendLine($"{testBounds.min} {testBounds.max} {testBounds.standardDeviation}");
                 Logger.Debug(builder.ToString());
 
+                // test 2: variance of 1
                 testBounds = new VarianceBounds(
                     damagePerShot - 1,
                     damagePerShot + 1,
@@ -142,13 +146,14 @@ namespace WeaponVariance
                 );
                 builder = new StringBuilder();
                 builder.AppendLine("HEADER");
-                for (int i = 0; i < 2000; i++)
+                for (int i = 0; i < iterations; i++)
                 {
                     builder.AppendLine(NormalDistibutionRandom(testBounds).ToString());
                 }
                 builder.AppendLine($"{testBounds.min} {testBounds.max} {testBounds.standardDeviation}");
                 Logger.Debug(builder.ToString());
 
+                // test 3 variance of 25
                 testBounds = new VarianceBounds(
                     damagePerShot - 25,
                     damagePerShot + 25,
@@ -156,7 +161,7 @@ namespace WeaponVariance
                 );
                 builder = new StringBuilder();
                 builder.AppendLine("HEADER");
-                for (int i = 0; i < 2000; i++)
+                for (int i = 0; i < iterations; i++)
                 {
                     builder.AppendLine(NormalDistibutionRandom(testBounds).ToString());
                 }
