@@ -8,11 +8,15 @@ using Harmony;
 using Newtonsoft.Json;
 using UnityEngine;
 using Random = UnityEngine.Random;
+using static WeaponVariance.WeaponVariance;
 
 namespace WeaponVariance
 {
     public static class WeaponVariance
     {
+        public const string ModName = "WeaponVariance";
+        public const string ModId   = "com.joelmeador.WeaponVariance";
+
         internal static Settings ModSettings = new Settings();
         internal static string ModDirectory;
 
@@ -29,7 +33,7 @@ namespace WeaponVariance
                 ModSettings = new Settings();
             }
 
-            var harmony = HarmonyInstance.Create(Settings.ModId);
+            var harmony = HarmonyInstance.Create(ModId);
             harmony.PatchAll(Assembly.GetExecutingAssembly());
         }
     }

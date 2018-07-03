@@ -1,12 +1,11 @@
 ﻿using System;
 using System.IO;
-using static WeaponVariance.WeaponVariance;
 
 namespace WeaponVariance
 {
     public static class Logger
     {
-        private static string LogFilePath => $"{ModDirectory}/{Settings.ModName}.log";
+        private static string LogFilePath => $"{WeaponVariance.ModDirectory}/{WeaponVariance.ModName}.log";
 
         public static void Error(Exception ex)
         {
@@ -20,7 +19,7 @@ namespace WeaponVariance
 
         public static void Debug(String line)
         {
-            if (!ModSettings.debug) return;
+            if (!WeaponVariance.ModSettings.debug) return;
             using (var writer = new StreamWriter(LogFilePath, true))
             {
                 writer.WriteLine(line);
