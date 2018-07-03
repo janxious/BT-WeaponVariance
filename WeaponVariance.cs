@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Text;
 using BattleTech;
 using Harmony;
 using Newtonsoft.Json;
@@ -54,6 +55,7 @@ namespace WeaponVariance
 
     public static class VariantWeapon
     {
+        private static bool runDebug = false;
         public static readonly Dictionary<string, float> WeaponDamageMemo = new Dictionary<string, float>();
         private static uint _nextId = 4_000_000_001u; // start high to avoid collision base persistence. Gives us ~294mil numbers
         private static uint NextId => _nextId++;
@@ -108,6 +110,53 @@ namespace WeaponVariance
                 max: damagePerShot + damageVariance,
                 standardDeviation: ModSettings.StandardDeviationVarianceMultiplier * damageVariance
             );
+            if (runDebug)
+            {
+                runDebug = false;
+                StringBuilder builder;
+                VarianceBounds testBounds;
+                testBounds = new VarianceBounds(
+                    damagePerShot - damageVariance,
+                    damagePerShot + damageVariance,
+                    ModSettings.StandardDeviationVarianceMultiplier * damageVariance
+                );
+                builder = new StringBuilder();
+                builder.AppendLine("HEADER");
+                for (int i = 0; i < 2000; i++)
+                {
+                    builder.AppendLine(NormalDistibutionRandom(testBounds, 1).ToString());
+                }
+                builder.AppendLine($"{testBounds.min} {testBounds.max} {testBounds.standardDeviation}");
+                Logger.Debug(builder.ToString());
+
+                testBounds = new VarianceBounds(
+                    damagePerShot - 1,
+                    damagePerShot + 1,
+                    ModSettings.StandardDeviationVarianceMultiplier
+                );
+                builder = new StringBuilder();
+                builder.AppendLine("HEADER");
+                for (int i = 0; i < 2000; i++)
+                {
+                    builder.AppendLine(NormalDistibutionRandom(testBounds).ToString());
+                }
+                builder.AppendLine($"{testBounds.min} {testBounds.max} {testBounds.standardDeviation}");
+                Logger.Debug(builder.ToString());
+
+                testBounds = new VarianceBounds(
+                    damagePerShot - 25,
+                    damagePerShot + 25,
+                    ModSettings.StandardDeviationVarianceMultiplier * 25
+                );
+                builder = new StringBuilder();
+                builder.AppendLine("HEADER");
+                for (int i = 0; i < 2000; i++)
+                {
+                    builder.AppendLine(NormalDistibutionRandom(testBounds).ToString());
+                }
+                builder.AppendLine($"{testBounds.min} {testBounds.max} {testBounds.standardDeviation}");
+                Logger.Debug(builder.ToString());
+            }
             var damage = NormalDistibutionRandom(bounds);
             var combat = Traverse.Create(weapon).Field("combat").GetValue<CombatGameState>();
             var damageWDesign = damage * weapon.GetMaskDamageMultiplier(weapon.parent.occupiedDesignMask);
