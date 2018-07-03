@@ -6,7 +6,7 @@ namespace WeaponVariance
     {
         public bool debug = false;
 
-        public string[] variancePerShot = { };
-        public string[] VariancePerShot => variancePerShot;
+        public float varianceStandardDeviation = 7.0f;
+        public float VarianceStandardDeviation => varianceStandardDeviation;
     }
 }

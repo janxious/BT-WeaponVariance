@@ -38,11 +38,39 @@ namespace WeaponVariance
         }
     }
 
+    internal struct VarianceBounds
+    {
+        public float min;
+        public float max;
+        public float standardDeviation;
+
+        public VarianceBounds(float min, float max, float standardDeviation)
+        {
+            this.min = min;
+            this.max = max;
+            this.standardDeviation = standardDeviation;
+        }
+    }
+
     public static class VariantWeapon
     {
         public static readonly Dictionary<string, float> WeaponDamageMemo = new Dictionary<string, float>();
         private static uint _nextId = 4_000_000_001u; // start high to avoid collision base persistence. Gives us ~294mil numbers
         private static uint NextId => _nextId++;
+
+        private static float NormalDistibutionRandom(VarianceBounds bounds, int step = -1)
+        {   // compute a random number that fits a gaussian function https://en.wikipedia.org/wiki/Gaussian_function
+            var rand1 = Random.value;
+            var rand2 = Random.value;
+            var gaussian_number = Mathf.Sqrt(-2 * Mathf.Log(rand1)) * Mathf.Cos(2 * Mathf.PI * rand2);
+            var mean = (bounds.max + bounds.min) / 2;
+            var random_number = (gaussian_number * bounds.standardDeviation) + mean;
+            if (step > 0) random_number = Mathf.RoundToInt(random_number / step) * step;
+            if (random_number < bounds.min || random_number > bounds.max) {
+                random_number = NormalDistibutionRandom(bounds, step);
+            }
+            return random_number;
+        }
 
         public static float VariantDamage(WeaponEffect weaponEffect, DesignMaskDef designMask)
         {
@@ -75,16 +103,19 @@ namespace WeaponVariance
             // the following should match with Weapon.DamagePerShotAdjusted(DesignMaskDef), with
             // the addition of the variance computations
             var damagePerShot = weapon.DamagePerShotAdjusted();
-            // TODO: should this match a dice pattern/normal distribution instead of pure random?
-            var varianceRange = new Vector2(damagePerShot - damageVariance, damagePerShot + damageVariance);
-            var damage = Random.Range(varianceRange.x, varianceRange.y);
+            var bounds = new VarianceBounds(
+                min: damagePerShot - damageVariance,
+                max: damagePerShot + damageVariance,
+                standardDeviation: ModSettings.VarianceStandardDeviation
+            );
+            var damage = NormalDistibutionRandom(bounds);
             var combat = Traverse.Create(weapon).Field("combat").GetValue<CombatGameState>();
             var damageWDesign = damage * weapon.GetMaskDamageMultiplier(weapon.parent.occupiedDesignMask);
             var result = damageWDesign * weapon.GetMaskDamageMultiplier(combat.MapMetaData.biomeDesignMask);
             Logger.Debug(
                 $"weapon: {weapon.Name} {weapon.GUID}\n" +
                 $"damage and variance: {damagePerShot}+-{damageVariance}\n" +
-                $"damage range: {varianceRange.x}-{varianceRange.y}\n" +
+                $"damage range: {bounds.min}-{bounds.max} (std. dev. {bounds.standardDeviation}\n" +
                 $"computed damage: {damage}\n" +
                 $"damage w/ design mask: {damageWDesign}\n" +
                 $"damage w/ env: {result}"
@@ -119,7 +150,7 @@ namespace WeaponVariance
     [HarmonyPatch(typeof(LaserEffect), "OnImpact")]
     public static class LaserEffect_OnImpact_Patch
     {   // o.g. call - for the purposes of our exercise, base/this are the same.
-        //   base.OnImpact(this.weapon.DamagePerShotAdjusted(this.weapon.parent.occupiedDesignMask));
+        //   this.weapon.DamagePerShotAdjusted(this.weapon.parent.occupiedDesignMask)
         // becomes
         //   IL_00ab: ldarg.0
         //   IL_00ac: ldfld class BattleTech.Weapon WeaponEffect::weapon
