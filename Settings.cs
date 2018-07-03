@@ -6,7 +6,7 @@ namespace WeaponVariance
     {
         public bool debug = false;
 
-        public float varianceStandardDeviation = 7.0f;
-        public float VarianceStandardDeviation => varianceStandardDeviation;
+        public float standardDeviationPercentOfVariance = 75.0f;
+        public float StandardDeviationVarianceMultiplier => standardDeviationPercentOfVariance / 100.0f;
     }
 }

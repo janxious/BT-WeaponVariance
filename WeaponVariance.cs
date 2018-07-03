@@ -106,7 +106,7 @@ namespace WeaponVariance
             var bounds = new VarianceBounds(
                 min: damagePerShot - damageVariance,
                 max: damagePerShot + damageVariance,
-                standardDeviation: ModSettings.VarianceStandardDeviation
+                standardDeviation: ModSettings.StandardDeviationVarianceMultiplier * damageVariance
             );
             var damage = NormalDistibutionRandom(bounds);
             var combat = Traverse.Create(weapon).Field("combat").GetValue<CombatGameState>();
