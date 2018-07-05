@@ -157,14 +157,13 @@ namespace WeaponVariance
 
         private static bool IsNonVariantWeapon(Weapon weapon, out int damageVariance, out float normalDamage)
         {
-// we reach for weapondef because Weapon.DamageVariance always returns 0. Really.
+            // we reach for weapondef because Weapon.DamageVariance always returns 0. Really.
             damageVariance = weapon.weaponDef.DamageVariance;
             if (damageVariance != 0)
             {
                 normalDamage = -1f;
                 return false;
             }
-            // normal weapon!
             WeaponDamageMemo[weapon.GUID] = weapon.DamagePerShotAdjusted(weapon.parent.occupiedDesignMask);
             Logger.Debug($"no variance: {weapon.GUID} / {WeaponDamageMemo[weapon.GUID]}");
             {
@@ -191,8 +190,7 @@ namespace WeaponVariance
         private static void EnsureWeaponGuid(Weapon weapon)
         {
             if (string.IsNullOrEmpty(weapon.GUID))
-            {
-                // Why is this? Well, the game doesn't generate GUIDs for a lot of objects until the game is saved, but
+            {   // Why is this? Well, the game doesn't generate GUIDs for a lot of objects until the game is saved, but
                 // that's not good for us if we're starting a new campaign, or running a skirmish, or new enemies spawn, so we
                 // need to generate a GUID for our weapon. Why and how the fuck the game generates "SRC<the one and only>".
                 // Instead of loading up the entirety of the game save persistence engine here, I'm just going to wing it with
@@ -238,6 +236,11 @@ namespace WeaponVariance
         {
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
         }
+
+        static void Postfix(float hitDamage, LaserEffect __instance)
+        {
+            Logger.Debug($"laser effect id: {__instance.GetInstanceID()}");
+        }
     }
 
     // Laser Effects override WeaponEffect.PlayImpact and does not call into base
@@ -260,9 +263,30 @@ namespace WeaponVariance
         {
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
         }
+        static void Postfix(float hitDamage, PPCEffect __instance)
+        {
+            Logger.Debug($"ppc effect id: {__instance.GetInstanceID()}");
+        }
     }
+    #endregion
 
-    // PPC Effects override WeaponEffect.PlayImpact, but don't have the code, so we need to 
+    #region melee
+    // Melee effects override WeaponEffect.OnImpact, but does call into base
+    [HarmonyPatch(typeof(MeleeEffect), "OnImpact")]
+    public static class MeleeEffect_OnImpact_Patch
+    {
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
+        }
+        static void Postfix(float hitDamage, MeleeEffect __instance)
+        {
+            Logger.Debug($"melee effect id: {__instance.GetInstanceID()}");
+        }
+    }
+    #endregion melee
+
+    // Melee and PPC Effects override WeaponEffect.PlayImpact, but just call into base, so we need to 
     // actually patch WeaponEffect.PlayImpact
     [HarmonyPatch(typeof(WeaponEffect), "PlayImpact")]
     public static class WeaponEffect_PlayImpact_Patch
@@ -272,5 +296,4 @@ namespace WeaponVariance
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
         }
     }
-    #endregion
 }
