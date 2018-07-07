@@ -38,13 +38,7 @@ namespace WeaponVariance
 
     public static class VariantWeapon
     {
-        // private static bool runDebug = false;
-        public static readonly Dictionary<string, float> WeaponDamageMemo = new Dictionary<string, float>();
-
-        private static uint _nextId = 4_000_000_001u; // start high to avoid collision base persistence. Gives us ~294mil numbers
-
-        private static uint NextId => _nextId++;
-
+        public static readonly Dictionary<ShotMemoKey, float> WeaponDamageMemo = new Dictionary<ShotMemoKey, float>();
         private static float NormalDistibutionRandom(VarianceBounds bounds, int step = -1)
         {
             // compute a random number that fits a gaussian function https://en.wikipedia.org/wiki/Gaussian_function
@@ -70,12 +64,14 @@ namespace WeaponVariance
         // This method is used by the IL generators in IntermediateLanguageFuckery
         public static float VariantDamage(WeaponEffect weaponEffect, DesignMaskDef designMask)
         {
+            var hitIndex = Traverse.Create(weaponEffect).Field("hitIndex").GetValue<int>();
+            var weaponEffectId = weaponEffect.GetInstanceID();
+            var key = new ShotMemoKey(weaponEffectId, hitIndex);
             var weapon = weaponEffect.weapon;
-            EnsureWeaponGuid(weapon);
-            if (DamageWasAlreadyCalculated(weapon, out var variantDamage)) return variantDamage;
-            if (IsNonVariantWeapon(weapon, out var damageVariance, out var normalDamage)) return normalDamage;
+            if (DamageWasAlreadyCalculated(key, out var variantDamage)) return variantDamage;
+            if (IsNonVariantWeapon(key, weapon, out var damageVariance, out var normalDamage)) return normalDamage;
 
-            // the following should match with Weapon.DamagePerShotAdjusted(DesignMaskDef), with
+            // the following damage calcs should match with Weapon.DamagePerShotAdjusted(DesignMaskDef), with
             // the addition of the variance computations
             var damagePerShot = weapon.DamagePerShotAdjusted();
             var bounds = new VarianceBounds(
@@ -83,124 +79,55 @@ namespace WeaponVariance
                 max: damagePerShot + damageVariance,
                 standardDeviation: ModSettings.StandardDeviationVarianceMultiplier * damageVariance
             );
-//            if (runDebug)
-//            {
-//                runDebug = false;
-//                const int iterations = 2000;
-//                StringBuilder builder;
-//                VarianceBounds testBounds;
-//
-//                // test 1: whatever is defined for the weapon plus the mod setting
-//                testBounds = new VarianceBounds(
-//                    damagePerShot - damageVariance,
-//                    damagePerShot + damageVariance,
-//                    ModSettings.StandardDeviationVarianceMultiplier * damageVariance
-//                );
-//                builder = new StringBuilder();
-//                builder.AppendLine("HEADER");
-//                for (int i = 0; i < iterations; i++)
-//                {
-//                    builder.AppendLine(NormalDistibutionRandom(testBounds, 1).ToString());
-//                }
-//
-//                builder.AppendLine($"{testBounds.min} {testBounds.max} {testBounds.standardDeviation}");
-//                Logger.Debug(builder.ToString());
-//
-//                // test 2: variance of 1
-//                testBounds = new VarianceBounds(
-//                    damagePerShot - 1,
-//                    damagePerShot + 1,
-//                    ModSettings.StandardDeviationVarianceMultiplier
-//                );
-//                builder = new StringBuilder();
-//                builder.AppendLine("HEADER");
-//                for (int i = 0; i < iterations; i++)
-//                {
-//                    builder.AppendLine(NormalDistibutionRandom(testBounds).ToString());
-//                }
-//
-//                builder.AppendLine($"{testBounds.min} {testBounds.max} {testBounds.standardDeviation}");
-//                Logger.Debug(builder.ToString());
-//
-//                // test 3 variance of 25
-//                testBounds = new VarianceBounds(
-//                    damagePerShot - 25,
-//                    damagePerShot + 25,
-//                    ModSettings.StandardDeviationVarianceMultiplier * 25
-//                );
-//                builder = new StringBuilder();
-//                builder.AppendLine("HEADER");
-//                for (int i = 0; i < iterations; i++)
-//                {
-//                    builder.AppendLine(NormalDistibutionRandom(testBounds).ToString());
-//                }
-//
-//                builder.AppendLine($"{testBounds.min} {testBounds.max} {testBounds.standardDeviation}");
-//                Logger.Debug(builder.ToString());
-//            }
-
             var damage = NormalDistibutionRandom(bounds);
             var combat = Traverse.Create(weapon).Field("combat").GetValue<CombatGameState>();
             var damageWDesign = damage * weapon.GetMaskDamageMultiplier(weapon.parent.occupiedDesignMask);
             var result = damageWDesign * weapon.GetMaskDamageMultiplier(combat.MapMetaData.biomeDesignMask);
             Logger.Debug(
-                $"weapon: {weapon.Name} {weapon.GUID}\n" +
+                $"effect id: {weaponEffectId}\n" +
+                $"hit index: {hitIndex}\n" +
                 $"damage and variance: {damagePerShot}+-{damageVariance}\n" +
                 $"damage range: {bounds.min}-{bounds.max} (std. dev. {bounds.standardDeviation}\n" +
                 $"computed damage: {damage}\n" +
                 $"damage w/ design mask: {damageWDesign}\n" +
                 $"damage w/ env: {result}"
             );
-            WeaponDamageMemo[weapon.GUID] = result;
-            return WeaponDamageMemo[weapon.GUID];
+            WeaponDamageMemo[key] = result;
+            return WeaponDamageMemo[key];
         }
 
-        private static bool IsNonVariantWeapon(Weapon weapon, out int damageVariance, out float normalDamage)
+        private static bool IsNonVariantWeapon(ShotMemoKey key, Weapon weapon, out int damageVariance, out float normalDamage)
         {
             // we reach for weapondef because Weapon.DamageVariance always returns 0. Really.
             damageVariance = weapon.weaponDef.DamageVariance;
             if (damageVariance != 0)
             {
+                Logger.Debug($"variance: {key.weaponEffectId} / {key.hitIndex}");
                 normalDamage = -1f;
                 return false;
             }
-            WeaponDamageMemo[weapon.GUID] = weapon.DamagePerShotAdjusted(weapon.parent.occupiedDesignMask);
-            Logger.Debug($"no variance: {weapon.GUID} / {WeaponDamageMemo[weapon.GUID]}");
+            WeaponDamageMemo[key] = weapon.DamagePerShotAdjusted(weapon.parent.occupiedDesignMask);
+            Logger.Debug($"no variance: {key.weaponEffectId} / {key.hitIndex}");
             {
-                normalDamage = WeaponDamageMemo[weapon.GUID];
+                normalDamage = WeaponDamageMemo[key];
                 return true;
             }
 
         }
 
-        private static bool DamageWasAlreadyCalculated(Weapon weapon, out float variantDamage)
+        private static bool DamageWasAlreadyCalculated(ShotMemoKey key, out float variantDamage)
         {
-            if (!WeaponDamageMemo.ContainsKey(weapon.GUID))
+            if (!WeaponDamageMemo.ContainsKey(key))
             {
                 variantDamage = -1f;
+                Logger.Debug($"key was not found: {key.weaponEffectId} / {key.hitIndex}");
                 return false;
             }
             // compute once per shot arrggghghhh why didn't the game designers just do this?
             // computers are fast at math but it's already in memory.
-            Logger.Debug($"key found: {weapon.GUID}");
-            variantDamage = WeaponDamageMemo[weapon.GUID];
+            Logger.Debug($"key found: {key.weaponEffectId} / {key.hitIndex}");
+            variantDamage = WeaponDamageMemo[key];
             return true;
-        }
-
-        private static void EnsureWeaponGuid(Weapon weapon)
-        {
-            if (string.IsNullOrEmpty(weapon.GUID))
-            {   // Why is this? Well, the game doesn't generate GUIDs for a lot of objects until the game is saved, but
-                // that's not good for us if we're starting a new campaign, or running a skirmish, or new enemies spawn, so we
-                // need to generate a GUID for our weapon. Why and how the fuck the game generates "SRC<the one and only>".
-                // Instead of loading up the entirety of the game save persistence engine here, I'm just going to wing it with
-                // magic strings, which I've just explained. There also appears to be a bug in harmony with calling the same
-                // method call to get the save game system's id generator. So, I dunno. Fuck all that. We'll make our own.
-                var newGuid = $"SRC<the one and only>_AG_{NextId.ToString()}";
-                weapon.SetGuid(newGuid);
-            }
-
-            Logger.Debug($"uid: {weapon.uid} | guid: {weapon.GUID} | {weapon.defId}");
         }
     }
 
@@ -215,17 +142,32 @@ namespace WeaponVariance
         }
     }
 
-//    A better way to do this is just with the full combat logger
-//    [HarmonyPatch(typeof(AttackDirector.AttackSequence), "OnAttackSequenceImpact")]
-//    public static class AttackDirector__AttackSequence_OnAttackSequenceImpact_Patch
-//    {
-//        static bool Prefix(MessageCenterMessage message, AttackDirector.AttackSequence __instance)
-//        {   // The only point of this is logging the damage that is sent through the system messaging queues
-//            var attackSequenceImpactMessage = (AttackSequenceImpactMessage)message;
-//            Logger.Debug($"hit damage: {attackSequenceImpactMessage.hitDamage}");
-//            return true;
-//        }
-//    }
+    #region missiles
+    // Laser effects override WeaponEffect.OnImpact, but does call into base
+    [HarmonyPatch(typeof(MissileEffect), "OnImpact")]
+    public static class MissileEffect_OnImpact_Patch
+    {
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
+        }
+
+        static void Postfix(float hitDamage, LaserEffect __instance)
+        {
+            Logger.Debug($"missile effect id: {__instance.GetInstanceID()}");
+        }
+    }
+
+    // Laser Effects override WeaponEffect.PlayImpact and does not call into base
+    [HarmonyPatch(typeof(MissileEffect), "PlayImpact")]
+    public static class MissileEffect_PlayImpact_Patch
+    {
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
+        }
+    }
+    #endregion missiles
 
     #region lasers
     // Laser effects override WeaponEffect.OnImpact, but does call into base

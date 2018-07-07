@@ -52,6 +52,7 @@
   <ItemGroup>
     <Compile Include="IntermediateLangaugeFuckery.cs" />
     <Compile Include="Logger.cs" />
+    <Compile Include="ShotMemoKey.cs" />
     <Compile Include="VarianceBounds.cs" />
     <Compile Include="WeaponVariance.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
