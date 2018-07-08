@@ -36,10 +36,9 @@ namespace WeaponVariance
         }
     }
 
-    public static class VariantWeapon
+    public static class Utility
     {
-        public static readonly Dictionary<ShotMemoKey, float> WeaponDamageMemo = new Dictionary<ShotMemoKey, float>();
-        private static float NormalDistibutionRandom(VarianceBounds bounds, int step = -1)
+        internal static float NormalDistibutionRandom(VarianceBounds bounds, int step = -1)
         {
             // compute a random number that fits a gaussian function https://en.wikipedia.org/wiki/Gaussian_function
             // iterative w/ limit adapted from https://natedenlinger.com/php-random-number-generator-with-normal-distribution-bell-curve/
@@ -60,14 +59,17 @@ namespace WeaponVariance
             if (iterations == iterationLimit) randomNumber = (bounds.min + bounds.max) / 2.0f;
             return randomNumber;
         }
+    }
+
+    public static class VariantWeapon
+    {
+        public static readonly Dictionary<ShotMemoKey, float> WeaponDamageMemo = new Dictionary<ShotMemoKey, float>();
 
         // This method is used by the IL generators in IntermediateLanguageFuckery
         public static float VariantDamage(WeaponEffect weaponEffect, DesignMaskDef designMask)
         {
-            var hitIndex = Traverse.Create(weaponEffect).Field("hitIndex").GetValue<int>();
-            var weaponEffectId = weaponEffect.GetInstanceID();
-            var key = new ShotMemoKey(weaponEffectId, hitIndex);
             var weapon = weaponEffect.weapon;
+            var key = ShotMemoKey(weaponEffect);            
             if (DamageWasAlreadyCalculated(key, out var variantDamage)) return variantDamage;
             if (IsNonVariantWeapon(key, weapon, out var damageVariance, out var normalDamage)) return normalDamage;
 
@@ -79,13 +81,13 @@ namespace WeaponVariance
                 max: damagePerShot + damageVariance,
                 standardDeviation: ModSettings.StandardDeviationVarianceMultiplier * damageVariance
             );
-            var damage = NormalDistibutionRandom(bounds);
+            var damage = Utility.NormalDistibutionRandom(bounds);
             var combat = Traverse.Create(weapon).Field("combat").GetValue<CombatGameState>();
             var damageWDesign = damage * weapon.GetMaskDamageMultiplier(weapon.parent.occupiedDesignMask);
             var result = damageWDesign * weapon.GetMaskDamageMultiplier(combat.MapMetaData.biomeDesignMask);
             Logger.Debug(
-                $"effect id: {weaponEffectId}\n" +
-                $"hit index: {hitIndex}\n" +
+                $"effect id: {key.weaponEffectId}\n" +
+                $"hit index: {key.hitIndex}\n" +
                 $"damage and variance: {damagePerShot}+-{damageVariance}\n" +
                 $"damage range: {bounds.min}-{bounds.max} (std. dev. {bounds.standardDeviation}\n" +
                 $"computed damage: {damage}\n" +
@@ -94,6 +96,20 @@ namespace WeaponVariance
             );
             WeaponDamageMemo[key] = result;
             return WeaponDamageMemo[key];
+        }
+
+        private static ShotMemoKey ShotMemoKey(WeaponEffect weaponEffect)
+        {
+            var hitIndex = Traverse.Create(weaponEffect).Field("hitIndex").GetValue<int>();
+            var weaponEffectId = weaponEffect.GetInstanceID();
+            if (weaponEffect is BulletEffect bulletEffect)
+            {
+                weaponEffectId = Traverse.Create(bulletEffect).Field("parentLauncher").GetValue<BallisticEffect>()
+                    .GetInstanceID();
+            }
+
+            var key = new ShotMemoKey(weaponEffectId, hitIndex);
+            return key;
         }
 
         private static bool IsNonVariantWeapon(ShotMemoKey key, Weapon weapon, out int damageVariance, out float normalDamage)
@@ -131,16 +147,33 @@ namespace WeaponVariance
         }
     }
 
-    [HarmonyPatch(typeof(AttackDirector), "OnAttackSequenceEnd")]
-    public static class AttackDirector_OnAttackSequenceEnd_Patch
+    [HarmonyPatch(typeof(AttackDirector), "OnAttackSequenceBegin")]
+    public static class AttackDirector_OnAttackSequenceBegin_Patch
     {
         public static void Postfix(MessageCenterMessage message, AttackDirector __instance)
         {   // we want to clear out our memoized shot damage after every attack sequence
             // because if we don't then we get one random number per weapon per game ^_^
-            Logger.Debug($"sequence is over: resetting memoized damage rolls!");
+            Logger.Debug($"sequence is beginning: resetting memoized damage rolls!");
             VariantWeapon.WeaponDamageMemo.Clear();
         }
     }
+
+    #region ballistic
+    // ballistic is… different. This will effectively do *random* number × bullet count, which is
+    // variant, but sort of shitty.
+    [HarmonyPatch(typeof(BallisticEffect), "OnComplete")]
+    public static class BallisticEffect_OnImpact_Patch
+    {
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
+        }
+        static void Postfix(BallisticEffect __instance)
+        {
+            Logger.Debug($"OnComplete ballistic effect id: {__instance.GetInstanceID()}");
+        }
+    }
+    #endregion ballistic
 
     #region missiles
     // Laser effects override WeaponEffect.OnImpact, but does call into base
@@ -152,7 +185,7 @@ namespace WeaponVariance
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
         }
 
-        static void Postfix(float hitDamage, LaserEffect __instance)
+        static void Postfix(float hitDamage, MissileEffect __instance)
         {
             Logger.Debug($"missile effect id: {__instance.GetInstanceID()}");
         }
@@ -166,6 +199,10 @@ namespace WeaponVariance
         {
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
         }
+        static void Postfix(MissileEffect __instance)
+        {
+            Logger.Debug($"PlayImpact missile effect id: {__instance.GetInstanceID()}");
+        }
     }
     #endregion missiles
 
@@ -178,10 +215,9 @@ namespace WeaponVariance
         {
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
         }
-
         static void Postfix(float hitDamage, LaserEffect __instance)
         {
-            Logger.Debug($"laser effect id: {__instance.GetInstanceID()}");
+            Logger.Debug($"OnImpact laser effect id: {__instance.GetInstanceID()}");
         }
     }
 
@@ -192,6 +228,10 @@ namespace WeaponVariance
         static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
         {
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
+        }
+        static void Postfix(LaserEffect __instance)
+        {
+            Logger.Debug($"PlayImpact laser effect id: {__instance.GetInstanceID()}");
         }
     }
     #endregion lasers
@@ -207,7 +247,7 @@ namespace WeaponVariance
         }
         static void Postfix(float hitDamage, PPCEffect __instance)
         {
-            Logger.Debug($"ppc effect id: {__instance.GetInstanceID()}");
+            Logger.Debug($"OnImpact ppc effect id: {__instance.GetInstanceID()}");
         }
     }
     #endregion
@@ -223,19 +263,25 @@ namespace WeaponVariance
         }
         static void Postfix(float hitDamage, MeleeEffect __instance)
         {
-            Logger.Debug($"melee effect id: {__instance.GetInstanceID()}");
+            Logger.Debug($"OnImpact melee effect id: {__instance.GetInstanceID()}");
         }
     }
     #endregion melee
 
     // Melee and PPC Effects override WeaponEffect.PlayImpact, but just call into base, so we need to 
     // actually patch WeaponEffect.PlayImpact
+    // Additionally Ballistic (and thus Gauss) call it directly.
+    // As does BurstBallistic.
     [HarmonyPatch(typeof(WeaponEffect), "PlayImpact")]
     public static class WeaponEffect_PlayImpact_Patch
     {  
         static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
         {
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
+        }
+        static void Postfix(WeaponEffect __instance)
+        {
+            Logger.Debug($"PlayImpact (base?) weapon effect id: {__instance.GetInstanceID()}\n{__instance.GetType()}");
         }
     }
 }
