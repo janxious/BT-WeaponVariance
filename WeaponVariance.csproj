@@ -41,12 +41,23 @@
     <Reference Include="Newtonsoft.Json, Version=10.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed">
       <HintPath>..\..\..\Library\Application Support\Steam\steamapps\common\BATTLETECH\BattleTech.app\Contents\Resources\Data\Managed\Newtonsoft.Json.dll</HintPath>
     </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Xml" />
+    <Reference Include="System">
+      <Package>/Users/joel/Library/Application Support/Steam/steamapps/common/BATTLETECH/BattleTech.app/Contents/Resources/Data/Managed/System.dll</Package>
+    </Reference>
+    <Reference Include="System.Core">
+      <Package>/Users/joel/Library/Application Support/Steam/steamapps/common/BATTLETECH/BattleTech.app/Contents/Resources/Data/Managed/System.Core.dll</Package>
+    </Reference>
+    <Reference Include="System.Data">
+      <Package>/Users/joel/Library/Application Support/Steam/steamapps/common/BATTLETECH/BattleTech.app/Contents/Resources/Data/Managed/System.Data.dll</Package>
+    </Reference>
+    <Reference Include="System.Xml">
+      <Package>/Users/joel/Library/Application Support/Steam/steamapps/common/BATTLETECH/BattleTech.app/Contents/Resources/Data/Managed/System.Xml.dll</Package>
+    </Reference>
     <Reference Include="UnityEngine, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
       <HintPath>..\..\..\Library\Application Support\Steam\steamapps\common\BATTLETECH\BattleTech.app\Contents\Resources\Data\Managed\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="SortByTonnage">
+      <HintPath>..\BT-SortByTonnage\bin\Release\SortByTonnage.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

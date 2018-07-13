@@ -1,6 +1,4 @@
-﻿using System.IO;
-
-namespace WeaponVariance
+﻿namespace WeaponVariance
 {
     public class Settings
     {

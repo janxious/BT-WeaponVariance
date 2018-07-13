@@ -76,6 +76,21 @@ namespace WeaponVariance
             // the following damage calcs should match with Weapon.DamagePerShotAdjusted(DesignMaskDef), with
             // the addition of the variance computations
             var damagePerShot = weapon.DamagePerShotAdjusted();
+
+            // you know, fuck it. if the value is zero we're in shot count enabler land
+//            if (damagePerShot == 0f)
+//            {
+//                Logger.Debug($"0 damage found {key.weaponEffectId}");
+//                return 0f;
+//            }
+
+            Logger.Debug(
+                $"some damage numbers:\n" +
+                $"weapon damage: {weapon.DamagePerShot}\n" +
+                $"weapon damage adjusted: {weapon.DamagePerShotAdjusted()}\n" +
+                $"stats based: {weapon.StatCollection.GetValue<float>("DamagePerShot")}"
+            );
+
             var bounds = new VarianceBounds(
                 min: damagePerShot - damageVariance,
                 max: damagePerShot + damageVariance,
@@ -102,10 +117,12 @@ namespace WeaponVariance
         {
             var hitIndex = Traverse.Create(weaponEffect).Field("hitIndex").GetValue<int>();
             var weaponEffectId = weaponEffect.GetInstanceID();
+            Logger.Debug($"shotmemokey weaponeffectid: {weaponEffectId}");
             if (weaponEffect is BulletEffect bulletEffect)
             {
                 weaponEffectId = Traverse.Create(bulletEffect).Field("parentLauncher").GetValue<BallisticEffect>()
                     .GetInstanceID();
+                Logger.Debug($"shotmemokey bullet weaponeffectid: {weaponEffectId}");
             }
 
             var key = new ShotMemoKey(weaponEffectId, hitIndex);
@@ -141,7 +158,7 @@ namespace WeaponVariance
             }
             // compute once per shot arrggghghhh why didn't the game designers just do this?
             // computers are fast at math but it's already in memory.
-            Logger.Debug($"key found: {key.weaponEffectId} / {key.hitIndex}");
+            Logger.Debug($"variant damage key found: {key.weaponEffectId} / {key.hitIndex}");
             variantDamage = WeaponDamageMemo[key];
             return true;
         }
@@ -158,23 +175,23 @@ namespace WeaponVariance
         }
     }
 
-    #region ballistic
-    // ballistic is… different. This will effectively do *random* number × bullet count, which is
-    // variant, but sort of shitty.
-    [HarmonyPatch(typeof(BallisticEffect), "OnComplete")]
-    public static class BallisticEffect_OnImpact_Patch
-    {
-        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
-        {
-            return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
-        }
-        static void Postfix(BallisticEffect __instance)
-        {
-            Logger.Debug($"OnComplete ballistic effect id: {__instance.GetInstanceID()}");
-        }
-    }
-    #endregion ballistic
-
+//    #region ballistic
+//    // ballistic is… different. This will effectively do *random* number × bullet count, which is
+//    // variant, but sort of shitty.
+//    [HarmonyPatch(typeof(BallisticEffect), "OnComplete")]
+//    public static class BallisticEffect_OnImpact_Patch
+//    {
+//        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+//        {
+//            return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
+//        }
+//        static void Postfix(BallisticEffect __instance)
+//        {
+//            Logger.Debug($"OnComplete ballistic effect id: {__instance.GetInstanceID()}");
+//        }
+//    }
+//    #endregion ballistic
+//
     #region missiles
     // Laser effects override WeaponEffect.OnImpact, but does call into base
     [HarmonyPatch(typeof(MissileEffect), "OnImpact")]
@@ -284,4 +301,103 @@ namespace WeaponVariance
             Logger.Debug($"PlayImpact (base?) weapon effect id: {__instance.GetInstanceID()}\n{__instance.GetType()}");
         }
     }
+
+    // kenniloggin'
+//    [HarmonyPatch(typeof(Weapon), "DamagePerShotAdjusted", new Type[]{})]
+//    public static class Weapon_DamagePerShotAdjusted_Patch
+//    {
+//        static void Prefix(Weapon __instance)
+//        {
+//            Logger.Debug($"DamagePerShotAdjusted (DamagePerShot): {__instance.DamagePerShot}");                                                                           
+//        }
+//        static void Postfix(Weapon __instance, float __result)
+//        {
+//            Logger.Debug($"DamagePerShotAdjusted (result): {__result}");                                                                           
+//        }
+//
+//    }
+
+    namespace ShotCountEnabler
+    {
+        [HarmonyPatch(typeof(BallisticEffect), "Update")]
+        public static class BallisticEffect_Update_Patch
+        {
+            static readonly Dictionary<int, int> _shotCountHolder = new Dictionary<int, int>();
+
+            static void Prefix(BallisticEffect __instance)
+            {
+                try
+                {
+                    var ballisticEffect = __instance;
+                    var instance = Traverse.Create(ballisticEffect);
+                    var effectId = ballisticEffect.GetInstanceID();
+
+                    var allBullets = instance.Method("AllBulletsComplete").GetValue<bool>();
+                    //Logger.Debug($"all bullets? {allBullets}");
+
+                    if (ballisticEffect.currentState != WeaponEffect.WeaponEffectState.WaitingForImpact || !allBullets) return;
+
+                    if (!_shotCountHolder.ContainsKey(effectId))
+                    {
+                        _shotCountHolder[effectId] = 1;
+                        Logger.Debug($"effectId: shotcount for {effectId} added");
+                    }
+
+                    var hitIndex = instance.Field("hitIndex");
+                    Logger.Debug($"hitIndex before: {hitIndex.GetValue<int>()}");
+                    instance.Field("hitIndex").SetValue(_shotCountHolder[effectId] - 1);
+                    Logger.Debug($"hitIndex after: {hitIndex.GetValue<int>()}");
+                    if (_shotCountHolder[effectId] >= ballisticEffect.hitInfo.numberOfShots)
+                    {
+                        _shotCountHolder[effectId] = 1;
+                        instance.Method("OnImpact", new object[] {VariantWeapon.VariantDamage(ballisticEffect, ballisticEffect.weapon.parent.occupiedDesignMask)}).GetValue();
+                        Logger.Debug($"effectId: {effectId} shotcount reset"); 
+                    }
+                    else
+                    {
+                        _shotCountHolder[effectId]++;
+                        instance.Method("OnImpact", new object[] {VariantWeapon.VariantDamage(ballisticEffect, ballisticEffect.weapon.parent.occupiedDesignMask)}).GetValue();
+                        ballisticEffect.Fire(ballisticEffect.hitInfo, 0, 0);
+                        Logger.Debug($"effectId: {effectId} shotcount incremented to: {_shotCountHolder[effectId]}");
+                    }
+                }
+                catch (Exception e)
+                {
+                    Logger.Error(e);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(BallisticEffect), "OnComplete")]
+        public static class BallisticEffect_OnComplete_Patch
+        {
+            static void Prefix(BallisticEffect __instance, ref float __state)
+            {
+                try
+                {
+                    Logger.Debug("Setting damagepershot to zero");
+                    var weapon = __instance.weapon;
+                    __state = weapon.DamagePerShot;
+                    weapon.StatCollection.Set("DamagePerShot", 0f);
+                }
+                catch (Exception e)
+                {
+                    Logger.Error(e);
+                }
+            }
+
+            static void Postfix(BallisticEffect __instance, float __state)
+            {
+                try
+                {
+                    Logger.Debug($"Setting damagepershot back to {__state}");
+                    __instance.weapon.StatCollection.Set("DamagePerShot", __state);
+                }
+                catch (Exception e)
+                {
+                    Logger.Error(e);
+                }
+            }
+        }
+    } 
 }
