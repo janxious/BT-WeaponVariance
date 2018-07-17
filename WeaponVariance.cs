@@ -4,8 +4,6 @@ using System.Reflection;
 using BattleTech;
 using Harmony;
 using Newtonsoft.Json;
-using UnityEngine;
-using Random = UnityEngine.Random;
 using static WeaponVariance.WeaponVariance;
 
 namespace WeaponVariance
@@ -24,6 +22,10 @@ namespace WeaponVariance
             try
             {
                 ModSettings = JsonConvert.DeserializeObject<Settings>(settingsJSON);
+                if (ModSettings.debug)
+                {
+                    HarmonyInstance.DEBUG = true;
+                }
             }
             catch (Exception ex)
             {
@@ -33,31 +35,6 @@ namespace WeaponVariance
 
             var harmony = HarmonyInstance.Create(ModId);
             harmony.PatchAll(Assembly.GetExecutingAssembly());
-        }
-    }
-
-    public static class Utility
-    {
-        internal static float NormalDistibutionRandom(VarianceBounds bounds, int step = -1)
-        {
-            // compute a random number that fits a gaussian function https://en.wikipedia.org/wiki/Gaussian_function
-            // iterative w/ limit adapted from https://natedenlinger.com/php-random-number-generator-with-normal-distribution-bell-curve/
-            const int iterationLimit = 10;
-            var iterations = 0;
-            float randomNumber;
-            do
-            {
-                var rand1 = Random.value;
-                var rand2 = Random.value;
-                var gaussianNumber = Mathf.Sqrt(-2 * Mathf.Log(rand1)) * Mathf.Cos(2 * Mathf.PI * rand2);
-                var mean = (bounds.max + bounds.min) / 2;
-                randomNumber = (gaussianNumber * bounds.standardDeviation) + mean;
-                if (step > 0) randomNumber = Mathf.RoundToInt(randomNumber / step) * step;
-                iterations++;
-            } while ((randomNumber < bounds.min || randomNumber > bounds.max) && iterations < iterationLimit);
-
-            if (iterations == iterationLimit) randomNumber = (bounds.min + bounds.max) / 2.0f;
-            return randomNumber;
         }
     }
 
@@ -76,13 +53,6 @@ namespace WeaponVariance
             // the following damage calcs should match with Weapon.DamagePerShotAdjusted(DesignMaskDef), with
             // the addition of the variance computations
             var damagePerShot = weapon.DamagePerShotAdjusted();
-
-            // you know, fuck it. if the value is zero we're in shot count enabler land
-//            if (damagePerShot == 0f)
-//            {
-//                Logger.Debug($"0 damage found {key.weaponEffectId}");
-//                return 0f;
-//            }
 
             Logger.Debug(
                 $"some damage numbers:\n" +
@@ -175,23 +145,6 @@ namespace WeaponVariance
         }
     }
 
-//    #region ballistic
-//    // ballistic is… different. This will effectively do *random* number × bullet count, which is
-//    // variant, but sort of shitty.
-//    [HarmonyPatch(typeof(BallisticEffect), "OnComplete")]
-//    public static class BallisticEffect_OnImpact_Patch
-//    {
-//        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
-//        {
-//            return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
-//        }
-//        static void Postfix(BallisticEffect __instance)
-//        {
-//            Logger.Debug($"OnComplete ballistic effect id: {__instance.GetInstanceID()}");
-//        }
-//    }
-//    #endregion ballistic
-//
     #region missiles
     // Laser effects override WeaponEffect.OnImpact, but does call into base
     [HarmonyPatch(typeof(MissileEffect), "OnImpact")]
@@ -285,6 +238,33 @@ namespace WeaponVariance
     }
     #endregion melee
 
+    #region burst ballistic
+    // Burst ballistic effects call out to damage per shot adjusted, but it's in the wrong place,
+    // so we have to adjust the function and then move the call a bit
+    [HarmonyPatch(typeof(BurstBallisticEffect), "Update")]
+    public static class BurstBallistic_Update_Patch
+    {
+        public static Dictionary<int, bool> _logged = new Dictionary<int, bool>();
+
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            IEnumerable<CodeInstruction> damagePerShotAdjusted = IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
+            damagePerShotAdjusted = IntermediateLangaugeFuckery.PerformBurstBallisticUpdateDamagePerShotMoveFuckery(damagePerShotAdjusted);
+            return damagePerShotAdjusted;
+        }
+
+        static void Postfix(BurstBallisticEffect __instance)
+        {
+            var id = __instance.GetInstanceID();
+            if (!_logged.ContainsKey(id))
+            {
+                Logger.Debug($"Update burst ballistic effect id: {id}");
+                _logged[id] = true;
+            }
+        }
+    }
+    #endregion
+
     // Melee and PPC Effects override WeaponEffect.PlayImpact, but just call into base, so we need to 
     // actually patch WeaponEffect.PlayImpact
     // Additionally Ballistic (and thus Gauss) call it directly.
@@ -302,7 +282,7 @@ namespace WeaponVariance
         }
     }
 
-    // kenniloggin'
+// kenniloggin'
 //    [HarmonyPatch(typeof(Weapon), "DamagePerShotAdjusted", new Type[]{})]
 //    public static class Weapon_DamagePerShotAdjusted_Patch
 //    {
