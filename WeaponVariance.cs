@@ -40,7 +40,7 @@ namespace WeaponVariance
 
     public static class VariantWeapon
     {
-        public static readonly Dictionary<ShotMemoKey, float> WeaponDamageMemo = new Dictionary<ShotMemoKey, float>();
+        internal static readonly Dictionary<ShotMemoKey, float> WeaponDamageMemo = new Dictionary<ShotMemoKey, float>();
 
         // This method is used by the IL generators in IntermediateLanguageFuckery
         public static float VariantDamage(WeaponEffect weaponEffect, DesignMaskDef designMask)
@@ -146,7 +146,7 @@ namespace WeaponVariance
     }
 
     #region missiles
-    // Laser effects override WeaponEffect.OnImpact, but does call into base
+    // Missiles effects override WeaponEffect.OnImpact, but does call into base
     [HarmonyPatch(typeof(MissileEffect), "OnImpact")]
     public static class MissileEffect_OnImpact_Patch
     {
@@ -155,10 +155,10 @@ namespace WeaponVariance
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
         }
 
-        static void Postfix(float hitDamage, MissileEffect __instance)
-        {
-            Logger.Debug($"missile effect id: {__instance.GetInstanceID()}");
-        }
+//        static void Postfix(float hitDamage, MissileEffect __instance)
+//        {
+//            Logger.Debug($"missile effect id: {__instance.GetInstanceID()}");
+//        }
     }
 
     // Laser Effects override WeaponEffect.PlayImpact and does not call into base
@@ -169,10 +169,10 @@ namespace WeaponVariance
         {
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
         }
-        static void Postfix(MissileEffect __instance)
-        {
-            Logger.Debug($"PlayImpact missile effect id: {__instance.GetInstanceID()}");
-        }
+//        static void Postfix(MissileEffect __instance)
+//        {
+//            Logger.Debug($"PlayImpact missile effect id: {__instance.GetInstanceID()}");
+//        }
     }
     #endregion missiles
 
@@ -215,10 +215,10 @@ namespace WeaponVariance
         {
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
         }
-        static void Postfix(float hitDamage, PPCEffect __instance)
-        {
-            Logger.Debug($"OnImpact ppc effect id: {__instance.GetInstanceID()}");
-        }
+//        static void Postfix(float hitDamage, PPCEffect __instance)
+//        {
+//            Logger.Debug($"OnImpact ppc effect id: {__instance.GetInstanceID()}");
+//        }
     }
     #endregion
 
@@ -231,10 +231,10 @@ namespace WeaponVariance
         {
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
         }
-        static void Postfix(float hitDamage, MeleeEffect __instance)
-        {
-            Logger.Debug($"OnImpact melee effect id: {__instance.GetInstanceID()}");
-        }
+//        static void Postfix(float hitDamage, MeleeEffect __instance)
+//        {
+//            Logger.Debug($"OnImpact melee effect id: {__instance.GetInstanceID()}");
+//        }
     }
     #endregion melee
 
@@ -244,26 +244,52 @@ namespace WeaponVariance
     [HarmonyPatch(typeof(BurstBallisticEffect), "Update")]
     public static class BurstBallistic_Update_Patch
     {
-        public static Dictionary<int, bool> _logged = new Dictionary<int, bool>();
-
         static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
         {
             IEnumerable<CodeInstruction> damagePerShotAdjusted = IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
             damagePerShotAdjusted = IntermediateLangaugeFuckery.PerformBurstBallisticUpdateDamagePerShotMoveFuckery(damagePerShotAdjusted);
             return damagePerShotAdjusted;
         }
-
-        static void Postfix(BurstBallisticEffect __instance)
-        {
-            var id = __instance.GetInstanceID();
-            if (!_logged.ContainsKey(id))
-            {
-                Logger.Debug($"Update burst ballistic effect id: {id}");
-                _logged[id] = true;
-            }
-        }
+//        public static Dictionary<int, bool> _logged = new Dictionary<int, bool>();
+//        static void Postfix(BurstBallisticEffect __instance)
+//        {
+//            var id = __instance.GetInstanceID();
+//            if (!_logged.ContainsKey(id))
+//            {
+//                Logger.Debug($"Update burst ballistic effect id: {id}");
+//                _logged[id] = true;
+//            }
+//        }
     }
     #endregion
+
+    #region flamers
+    [HarmonyPatch(typeof(FlamerEffect), "PlayImpact")]
+    public static class FlamerEffect_PlayImpact_Patch
+    {  
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
+        }
+//        static void Postfix(WeaponEffect __instance)
+//        {
+//            Logger.Debug($"PlayImpact (flamer) weapon effect id: {__instance.GetInstanceID()}\n{__instance.GetType()}");
+//        }
+    }
+
+    [HarmonyPatch(typeof(FlamerEffect), "OnImpact")]
+    public static class FlamerEffect_OnImpact_Patch
+    {
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
+        }
+//        static void Postfix(float hitDamage, MissileEffect __instance)
+//        {
+//            Logger.Debug($"missile effect id: {__instance.GetInstanceID()}");
+//        }
+    }
+    #endregion flamers
 
     // Melee and PPC Effects override WeaponEffect.PlayImpact, but just call into base, so we need to 
     // actually patch WeaponEffect.PlayImpact
@@ -276,10 +302,10 @@ namespace WeaponVariance
         {
             return IntermediateLangaugeFuckery.PerformDamagePerShotAdjustedFuckery(instructions);
         }
-        static void Postfix(WeaponEffect __instance)
-        {
-            Logger.Debug($"PlayImpact (base?) weapon effect id: {__instance.GetInstanceID()}\n{__instance.GetType()}");
-        }
+//        static void Postfix(WeaponEffect __instance)
+//        {
+//            Logger.Debug($"PlayImpact (base?) weapon effect id: {__instance.GetInstanceID()}\n{__instance.GetType()}");
+//        }
     }
 
 // kenniloggin'
